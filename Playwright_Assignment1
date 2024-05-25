@@ -92,7 +92,6 @@ export class SauceDemoPage {
 }
 
 
-
 import { setWorldConstructor, World } from '@cucumber/cucumber';
 import { Browser, chromium, Page } from '@playwright/test';
 
