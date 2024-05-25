@@ -35,8 +35,7 @@ export default defineConfig({
 });
 
 
-typescript
-Copy code
+
 import { Page } from '@playwright/test';
 
 export class SauceDemoPage {
@@ -93,8 +92,7 @@ export class SauceDemoPage {
 }
 
 
-typescript
-Copy code
+
 import { setWorldConstructor, World } from '@cucumber/cucumber';
 import { Browser, chromium, Page } from '@playwright/test';
 
@@ -119,8 +117,7 @@ setWorldConstructor<CustomWorld>(class CustomWorld {
 });
 
 
-typescript
-Copy code
+
 import { Given, When, Then, Before, After } from '@cucumber/cucumber';
 import { expect } from '@playwright/test';
 import { readFileSync } from 'fs';
@@ -198,8 +195,7 @@ When('I logout from the website', async function (this: CustomWorld) {
   await sauceDemoPage.logout();
 });
 
-gherkin
-Copy code
+
 Feature: Sauce Demo Shopping
 
   Scenario: Complete shopping process
