@@ -1,0 +1,218 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "CommonJS",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "./dist"
+  },
+  "include": ["src/**/*.ts", "features/**/*.ts"]
+}
+
+
+module.exports = {
+  default: {
+    require: ["features/step_definitions/*.ts", "ts-node/register"],
+    format: ["progress", "json:reports/cucumber_report.json"],
+    parallel: 1
+  }
+};
+
+import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './features',
+  timeout: 30000,
+  use: {
+    headless: true,
+    viewport: { width: 1280, height: 720 },
+    ignoreHTTPSErrors: true,
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure'
+  },
+});
+
+
+typescript
+Copy code
+import { Page } from '@playwright/test';
+
+export class SauceDemoPage {
+  constructor(private page: Page) {}
+
+  async navigate() {
+    await this.page.goto('https://www.saucedemo.com/');
+  }
+
+  async login(username: string, password: string) {
+    await this.page.fill('#user-name', username);
+    await this.page.fill('#password', password);
+    await this.page.click('#login-button');
+  }
+
+  async addItemToCart(itemName: string) {
+    await this.page.click(`text=${itemName}`);
+    await this.page.click('button:has-text("Add to cart")');
+  }
+
+  async goToCart() {
+    await this.page.click('.shopping_cart_link');
+  }
+
+  async removeItemFromCart(itemName: string) {
+    await this.page.click(`text=${itemName}`);
+    await this.page.click('button:has-text("Remove")');
+  }
+
+  async checkout(firstName: string, lastName: string, postalCode: string) {
+    await this.page.click('button:has-text("Checkout")');
+    await this.page.fill('#first-name', firstName);
+    await this.page.fill('#last-name', lastName);
+    await this.page.fill('#postal-code', postalCode);
+    await this.page.click('input:has-text("Continue")');
+  }
+
+  async finishCheckout() {
+    await this.page.click('button:has-text("Finish")');
+  }
+
+  async cancelCheckout() {
+    await this.page.click('button:has-text("Cancel")');
+  }
+
+  async verifyOrderCompletion() {
+    return await this.page.textContent('.complete-header');
+  }
+
+  async logout() {
+    await this.page.click('#react-burger-menu-btn');
+    await this.page.click('#logout_sidebar_link');
+  }
+}
+
+
+typescript
+Copy code
+import { setWorldConstructor, World } from '@cucumber/cucumber';
+import { Browser, chromium, Page } from '@playwright/test';
+
+export interface CustomWorld extends World {
+  browser: Browser;
+  page: Page;
+}
+
+setWorldConstructor<CustomWorld>(class CustomWorld {
+  browser!: Browser;
+  page!: Page;
+
+  async init() {
+    this.browser = await chromium.launch();
+    this.page = await this.browser.newPage();
+  }
+
+  async cleanup() {
+    await this.page.close();
+    await this.browser.close();
+  }
+});
+
+
+typescript
+Copy code
+import { Given, When, Then, Before, After } from '@cucumber/cucumber';
+import { expect } from '@playwright/test';
+import { readFileSync } from 'fs';
+import { parse } from 'csv-parse/sync';
+import { SauceDemoPage } from '../../src/pages/sauceDemoPage';
+import { CustomWorld } from '../../src/support/world';
+
+let items: string[];
+
+Before(async function (this: CustomWorld) {
+  await this.init();
+  const fileContent = readFileSync('testData/testData.csv', { encoding: 'utf-8' });
+  const records = parse(fileContent, { columns: true });
+  items = records.map((record: { items: string }) => record.items);
+});
+
+After(async function (this: CustomWorld) {
+  await this.cleanup();
+});
+
+Given('I open the Sauce Demo website', async function (this: CustomWorld) {
+  const sauceDemoPage = new SauceDemoPage(this.page);
+  await sauceDemoPage.navigate();
+});
+
+When('I login with username {string} and password {string}', async function (this: CustomWorld, username: string, password: string) {
+  const sauceDemoPage = new SauceDemoPage(this.page);
+  await sauceDemoPage.login(username, password);
+});
+
+When('I add items to the cart', async function (this: CustomWorld) {
+  const sauceDemoPage = new SauceDemoPage(this.page);
+  for (const item of items) {
+    await sauceDemoPage.addItemToCart(item);
+  }
+});
+
+Then('I verify all items are added to the cart', async function (this: CustomWorld) {
+  const sauceDemoPage = new SauceDemoPage(this.page);
+  await sauceDemoPage.goToCart();
+  for (const item of items) {
+    const isVisible = await this.page.isVisible(`text=${item}`);
+    if (!isVisible) {
+      throw new Error(`${item} is not present in the cart`);
+    }
+  }
+});
+
+When('I remove {string} from the cart', async function (this: CustomWorld, itemName: string) {
+  const sauceDemoPage = new SauceDemoPage(this.page);
+  await sauceDemoPage.removeItemFromCart(itemName);
+});
+
+When('I checkout with first name {string}, last name {string}, and postal code {string}', async function (this: CustomWorld, firstName: string, lastName: string, postalCode: string) {
+  const sauceDemoPage = new SauceDemoPage(this.page);
+  await sauceDemoPage.checkout(firstName, lastName, postalCode);
+});
+
+Then('I verify the total price and finish or cancel the checkout based on the price', async function (this: CustomWorld) {
+  const totalPrice = await this.page.textContent('.summary_total_label');
+  const price = parseFloat(totalPrice!.replace('Total: $', ''));
+  const sauceDemoPage = new SauceDemoPage(this.page);
+
+  if (price <= 40.00) {
+    await sauceDemoPage.finishCheckout();
+    const completionMessage = await sauceDemoPage.verifyOrderCompletion();
+    expect(completionMessage).toBe('Thank you for your order!');
+  } else {
+    await sauceDemoPage.cancelCheckout();
+  }
+});
+
+When('I logout from the website', async function (this: CustomWorld) {
+  const sauceDemoPage = new SauceDemoPage(this.page);
+  await sauceDemoPage.logout();
+});
+
+gherkin
+Copy code
+Feature: Sauce Demo Shopping
+
+  Scenario: Complete shopping process
+    Given I open the Sauce Demo website
+    When I login with username "standard_user" and password "secret_sauce"
+    When I add items to the cart
+    Then I verify all items are added to the cart
+    When I remove "Sauce Labs Bike Light" from the cart
+    When I checkout with first
+
+
+
+
+
+
+
